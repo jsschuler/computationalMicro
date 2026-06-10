@@ -158,3 +158,79 @@ end
     q_labor3 = max(0, q3 - s_reg3)
     @test 1//1 * min(3, q_labor3) == labor_supply(lm3)
 end
+
+# ── Randomized stress test ────────────────────────────────────────────────────
+#
+# Generate random pure-labor-firm markets (1–3 goods, 1–5 consumers, 1–3 firms per good)
+# and verify:
+#   (a) The solver never throws an error.
+#   (b) Every returned goods equilibrium with cleared=true actually clears.
+#   (c) When labor market clears exactly, wages are in the valid search range.
+# Also track the exact-labor-clearing rate and the goods no-equilibrium rate.
+
+@testset "Phase 9: randomized factor market stress" begin
+    n_labor_cleared  = 0
+    n_goods_nonexist = 0
+    n_trials         = 500
+
+    for seed in 1:n_trials
+        rng = MersenneTwister(seed + 9000)
+        k   = rand(rng, 1:3)
+
+        # Random consumers for each good
+        goods = [begin
+            nc = rand(rng, 1:5)
+            consumers = [ConsumerDemand(j,
+                sort([rand(rng, 1:20)//1 for _ in 1:rand(rng, 1:4)], rev=true))
+                for _ in 1:nc]
+            GoodMarket(j, consumers, FirmSupply[])
+        end for j in 1:k]
+        m = Market(goods, k)
+
+        # One labor firm per good: ℓ ∈ {1//2, 1//1, 3//2, 2//1}, cap ∈ 1:4
+        ℓs = [1//2, 1//1, 3//2, 2//1]
+        firms_wl = [[FirmWithLabor(j, rand(rng, ℓs), rand(rng, 1:4))]
+                    for j in 1:k]
+
+        # Endowment drawn from [0, max_possible_labor]; avoid trivial zero
+        max_labor = sum(f.labor_per_unit * f.capacity
+                        for j in 1:k for f in firms_wl[j]; init=0//1)
+        frac      = rand(rng, 1:9) // 10
+        endowment = max(1//4, max_labor * frac)
+        lm = LaborMarket(1, [endowment])
+
+        # Solver must not throw
+        p_stars, w_star = solve_wge_with_labor(m, firms_wl, lm)
+
+        @test length(p_stars) == k
+        @test w_star >= 1//100
+        @test w_star <= 100//1
+
+        # Every cleared goods equilibrium must actually clear
+        for j in 1:k
+            r = p_stars[j]
+            r.cleared || (n_goods_nonexist += 1; continue)
+            mc_j = marginal_cost(firms_wl[j][1], w_star)
+            gm_j = GoodMarket(j, m.goods[j].consumers,
+                              [FirmSupply(j, fill(mc_j, firms_wl[j][1].capacity))])
+            @test clears(gm_j, r.price)
+        end
+
+        # Check labor balance
+        total_labor = 0//1
+        for j in 1:k
+            mc_j = marginal_cost(firms_wl[j][1], w_star)
+            gm_j = GoodMarket(j, m.goods[j].consumers,
+                              [FirmSupply(j, fill(mc_j, firms_wl[j][1].capacity))])
+            q_j  = aggregate_demand(gm_j, p_stars[j].price)
+            total_labor += firms_wl[j][1].labor_per_unit * min(firms_wl[j][1].capacity, q_j)
+        end
+        total_labor == labor_supply(lm) && (n_labor_cleared += 1)
+    end
+
+    @info "Factor market randomized: labor cleared exactly $n_labor_cleared / $n_trials; goods non-existence: $n_goods_nonexist"
+    # Labor clearing rate is low by design: random endowments usually fall between the
+    # discrete steps of the labor demand step function, just like goods non-existence.
+    # The hard invariants above (goods clearing, wage bounds) are the real assertions.
+    @test n_labor_cleared >= n_trials ÷ 20   # at least 5% clear exactly
+end
