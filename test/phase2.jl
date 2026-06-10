@@ -12,11 +12,14 @@
     @test all(wtac[i] <= wtac[i+1] for i in 1:4)
 
     rng3 = MersenneTwister(7)
-    gm, p = generate_good_market(rng3;
+    gm, r = generate_good_market(rng3;
         good=1, n_consumers=3, n_firms=2, max_units=4)
     @test gm isa GoodMarket
-    if !isnothing(p)
-        @test clears(gm, p)
+    @test r isa EquilibriumResult
+    if r.cleared
+        @test clears(gm, r.price)
+    else
+        @test !clears(gm, r.price)   # min-|Z| price does not clear
     end
 
 end

@@ -8,18 +8,19 @@ end
 
     m = simple_market()
 
-    p_exact = find_equilibrium(m)
-    @test !isnothing(p_exact)
-    @test clears(m, p_exact)
+    r = find_equilibrium(m)
+    @test r isa EquilibriumResult
+    @test r.cleared
+    @test clears(m, r.price)
 
     p_tat = tatonnement(m)
     @test clears(m, p_tat)
 
     mkt = Market([m], 1)
-    ps_exact = solve_wge_exact(mkt)
-    @test length(ps_exact) == 1
-    @test !isnothing(ps_exact[1])
-    @test clears(m, ps_exact[1])
+    rs_exact = solve_wge_exact(mkt)
+    @test length(rs_exact) == 1
+    @test rs_exact[1].cleared
+    @test clears(m, rs_exact[1].price)
 
     ps_tat = solve_wge(mkt)
     @test clears(m, ps_tat[1])
@@ -29,8 +30,8 @@ end
 @testset "Phase 3: Walras' Law (exact market)" begin
 
     m   = simple_market()
-    p   = find_equilibrium(m)
+    r   = find_equilibrium(m)
     mkt = Market([m], 1)
-    @test walras_residual(mkt, [p]) == 0//1
+    @test walras_residual(mkt, [r.price]) == 0//1
 
 end

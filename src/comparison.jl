@@ -56,35 +56,28 @@ end
 
 struct MultiMarketStats
     k           :: Int
-    p_wge       :: Vector{Union{Price,Nothing}}
+    p_wge       :: Vector{EquilibriumResult}
     q_wge       :: Vector{Int}
     surplus_wge :: Vector{Rational{Int64}}
-    walras      :: Rational{Int64}    # p · Z(p*) — should be 0
+    walras      :: Rational{Int64}    # p · Z(p*) — 0 for cleared goods
 end
 
 function multi_compare(m::Market,
-                       p_wge::Vector{Union{Price,Nothing}}) :: MultiMarketStats
-    q_wge = Int[]
+                       p_wge::Vector{EquilibriumResult}) :: MultiMarketStats
+    q_wge   = Int[]
     surplus = Rational{Int64}[]
-    p_known = Price[]   # prices where equilibrium exists, for Walras check
 
     for j in 1:m.k
-        p = p_wge[j]
-        if isnothing(p)
-            push!(q_wge, 0)
-            push!(surplus, 0//1)
-        else
-            push!(q_wge, aggregate_demand(m.goods[j], p))
-            push!(surplus, wge_surplus(m.goods[j], p))
-            push!(p_known, p)
-        end
+        r = p_wge[j]
+        push!(q_wge,   aggregate_demand(m.goods[j], r.price))
+        push!(surplus, wge_surplus(m.goods[j], r.price))
     end
 
-    # Walras' Law on the subset of goods with known equilibrium prices
-    known_idx = findall(!isnothing, p_wge)
-    w = isempty(known_idx) ? 0//1 :
-        sum(p_wge[j] * excess_demand(m.goods[j], p_wge[j])
-            for j in known_idx)
+    # Walras' Law holds only at exact equilibria (cleared = true)
+    cleared_idx = findall(r -> r.cleared, p_wge)
+    w = isempty(cleared_idx) ? 0//1 :
+        sum(p_wge[j].price * excess_demand(m.goods[j], p_wge[j].price)
+            for j in cleared_idx)
 
     MultiMarketStats(m.k, p_wge, q_wge, surplus, w)
 end

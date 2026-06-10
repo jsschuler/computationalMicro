@@ -126,8 +126,9 @@ end
     m = GoodMarket(1,
         [ConsumerDemand(1, [7//5])],
         [FirmSupply(1,    [7//5])])
-    p_eq = find_equilibrium(m)
-    @test p_eq == 7//5
+    r = find_equilibrium(m)
+    @test r.cleared
+    @test r.price == 7//5
     @test sb_depth(7//5) == 4   # cf=[1,2,2], depth=4
 
     # [6/5, 8/5] = [1.2, 1.6] — no integer; 3//2 (depth 2) lies inside
@@ -144,8 +145,9 @@ end
     m = GoodMarket(1,
         [ConsumerDemand(1, [4//1]), ConsumerDemand(1, [4//1])],
         [FirmSupply(1,    [3//1, 5//1])])
-    @test isnothing(find_equilibrium(m))
-    @test isnothing(focal_price(m))
+    r = find_equilibrium(m)
+    @test !r.cleared                # min-|Z| fallback, not a true equilibrium
+    @test isnothing(focal_price(m)) # focal_price returns nothing for uncleared markets
 end
 
 @testset "Phase 8: focal_stats — depth saving is non-negative" begin
@@ -153,10 +155,10 @@ end
     n_tested = 0
     for seed in 1:100
         rng2 = MersenneTwister(seed)
-        m, p = generate_good_market(rng2;
+        m, r = generate_good_market(rng2;
             good=1, n_consumers=rand(rng2, 2:5), n_firms=rand(rng2, 2:5),
             max_units=3, Q=100)
-        isnothing(p) && continue
+        r.cleared || continue
         stats = focal_stats(m, 1//20)
         @test stats.depth_saving >= 0
         n_tested += 1
@@ -168,11 +170,11 @@ end
     depths = Int[]
     for seed in 1:200
         rng = MersenneTwister(seed)
-        m, p = generate_good_market(rng;
+        m, r = generate_good_market(rng;
             good=1, n_consumers=rand(rng, 2:6), n_firms=rand(rng, 2:6),
             max_units=4, Q=100)
-        isnothing(p) && continue
-        push!(depths, sb_depth(p))
+        r.cleared || continue
+        push!(depths, sb_depth(r.price))
     end
     @test !isempty(depths)
     @info "WGE price sb_depth — min: $(minimum(depths))  mean: $(round(mean(depths), digits=2))  max: $(maximum(depths))"

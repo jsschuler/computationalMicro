@@ -5,7 +5,7 @@ using Statistics
 
 # ── Phase 1: core types and aggregate functions ───────────────────────────────
 include("core.jl")
-export Price, PriceVec, Bundle, RatVec
+export Price, PriceVec, Bundle, RatVec, EquilibriumResult
 export ConsumerDemand, FirmSupply, GoodMarket, Market
 export supply_correspondence, aggregate_demand, aggregate_supply
 export clears, excess_demand, walras_residual

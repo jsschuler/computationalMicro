@@ -7,6 +7,14 @@ const PriceVec = Vector{Rational{Int64}}
 const Bundle   = Vector{Int64}
 const RatVec   = Vector{Rational{Int64}}
 
+# Returned by find_equilibrium: always carries a price.
+# cleared = true  → exact Walrasian equilibrium, D(p) ∈ [S_min, S_max]
+# cleared = false → no equilibrium; price minimises |Z(p)| over candidate set
+struct EquilibriumResult
+    price   :: Price
+    cleared :: Bool
+end
+
 # ── Consumer demand ───────────────────────────────────────────────────────────
 struct ConsumerDemand
     good :: Int

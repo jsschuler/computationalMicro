@@ -187,25 +187,28 @@ check_revealed_preference(c, 3//1) # => true
 
 ```julia
 rng = MersenneTwister(42)
-market, p_star = generate_good_market(rng;
+market, r = generate_good_market(rng;
     good=1, n_consumers=5, n_firms=3, max_units=4, Q=100)
-# p_star :: Union{Price, Nothing} — nothing if no competitive equilibrium exists
+# r :: EquilibriumResult — always has a price; r.cleared flags true equilibria
 
-mkt, p_stars = generate_market(42; k=3, n_consumers=4, n_firms=3, max_units=5)
-# p_stars :: Vector{Union{Price, Nothing}} — propagates nothing per good
+mkt, results = generate_market(42; k=3, n_consumers=4, n_firms=3, max_units=5)
+# results :: Vector{EquilibriumResult} — one per good
 ```
 
 ### Phase 3 — WGE Solvers
 
-**Exact scan** (`find_equilibrium`) — scans the sorted union of all WTP/WTA values. Returns `Union{Price, Nothing}`: `nothing` when no competitive equilibrium exists. `O(n log n)`.
+**Exact scan** (`find_equilibrium`) — scans the sorted union of all WTP/WTA values plus midpoints. Returns an `EquilibriumResult` always: `cleared=true` if an exact equilibrium is found, `cleared=false` if demand jumps over supply (the price returned minimises `|Z(p)|` over the candidate set). `O(n log n)`.
 
-**Tatônnement** (`tatonnement`) — bisection on ℚ using the Stern-Brocot mediant to keep denominators bounded. Always returns a `Price` — the exact clearing price when found, or the best mediant approximation after `max_iter` steps. `solve_wge` returns `PriceVec`.
+**Tatônnement** (`tatonnement`) — bisection on ℚ using the Stern-Brocot mediant to keep denominators bounded. Always returns a `Price`. `solve_wge` returns `PriceVec`.
 
 ```julia
-find_equilibrium(m)    # :: Union{Price, Nothing} — exact or nothing
-tatonnement(m)         # :: Price                 — always returns a price
-solve_wge_exact(mkt)   # :: Vector{Union{Price, Nothing}}
-solve_wge(mkt)         # :: PriceVec
+r = find_equilibrium(m)   # :: EquilibriumResult
+r.cleared                  # true = exact WGE; false = min-|Z| fallback
+r.price                    # the price in either case
+
+tatonnement(m)             # :: Price — always returns
+solve_wge_exact(mkt)       # :: Vector{EquilibriumResult}
+solve_wge(mkt)             # :: PriceVec
 ```
 
 ### Phase 4 — Zero Intelligence Traders
@@ -320,13 +323,13 @@ julia --project=. -e 'import Pkg; Pkg.test()'
 
 The suite runs 37 test sets including three randomized batches of 200 markets each and phase-gated extension tests (phases 7–8). Four non-obvious findings surfaced during development:
 
-**Equilibrium non-existence in multi-unit markets.** The existence theorem (`max_i vᵢ¹ ≥ min_f cᶠ¹ → equilibrium exists`) holds only for single-unit agents. With multi-unit demands, a demand step can jump by 2 (two consumers share the same WTP), skipping over the supply level entirely. `find_equilibrium` correctly returns `nothing` in those cases — 1 out of 200 random markets has no competitive equilibrium.
+**Equilibrium non-existence in multi-unit markets.** The existence theorem (`max_i vᵢ¹ ≥ min_f cᶠ¹ → equilibrium exists`) holds only for single-unit agents. With multi-unit demands, a demand step can jump by 2 or more (e.g. two consumers share the same WTP), skipping over the supply level entirely. `find_equilibrium` returns an `EquilibriumResult` with `cleared=false` in those cases, setting `price` to the min-|Z| candidate — 1 out of 200 random markets triggers this.
 
 **Overflow in naïve rational bisection.** The midpoint `(p_lo + p_hi) / 2` doubles the rational denominator at each iteration, overflowing `Int64` within ~60 steps from the default bounds `[1/100, 1000]`. `tatonnement` uses the Stern-Brocot mediant `(a+c)//(b+d)` instead, which keeps denominators growing linearly.
 
 **Wrong surplus formula.** The spec's `total_surplus` gave each consumer up to `q` units rather than distributing `q` units efficiently across all agents — overcounting consumer surplus by a factor proportional to the number of consumers. The correct formula sorts all WTP descending and all WTA ascending, then differences the top-`q` prefixes.
 
-**`compare` used gross demand for efficiency.** Passing raw ZI demand (rather than `min(demand, supply)`) to `zi_efficiency` assumed every demanded unit was fulfilled. `compare` now applies `min.(zi_d, zi_s)` internally, and `generate_market` propagates `nothing` equilibria rather than silently substituting `1//1`.
+**`compare` used gross demand for efficiency.** Passing raw ZI demand (rather than `min(demand, supply)`) to `zi_efficiency` assumed every demanded unit was fulfilled. `compare` now applies `min.(zi_d, zi_s)` internally. `generate_market` returns `Vector{EquilibriumResult}` so non-clearing markets are flagged rather than silently dropped or patched.
 
 ---
 

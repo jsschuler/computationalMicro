@@ -57,16 +57,16 @@ end
 # The "focal" equilibrium price: shallowest Stern-Brocot rational that lies
 # within ε of the WGE price.  Returns nothing when no equilibrium exists.
 function focal_price(m, ε::Price = 1//100) :: Union{Price, Nothing}
-    p_wge = find_equilibrium(m)
-    isnothing(p_wge) && return nothing
-    simplest_rational(p_wge - ε, p_wge + ε)
+    r = find_equilibrium(m)
+    r.cleared || return nothing
+    simplest_rational(r.price - ε, r.price + ε)
 end
 
 # Stern-Brocot depth of the WGE price — a measure of market "arithmetic complexity".
 function price_complexity(m) :: Union{Int, Nothing}
-    p = find_equilibrium(m)
-    isnothing(p) && return nothing
-    sb_depth(p)
+    r = find_equilibrium(m)
+    r.cleared || return nothing
+    sb_depth(r.price)
 end
 
 struct FocalPriceStats
@@ -78,10 +78,10 @@ struct FocalPriceStats
 end
 
 function focal_stats(m, ε::Price = 1//100) :: FocalPriceStats
-    p_wge   = find_equilibrium(m)
-    isnothing(p_wge) && return FocalPriceStats(nothing, nothing, nothing, nothing, nothing)
-    p_focal = simplest_rational(p_wge - ε, p_wge + ε)
-    d_wge   = sb_depth(p_wge)
+    r = find_equilibrium(m)
+    r.cleared || return FocalPriceStats(nothing, nothing, nothing, nothing, nothing)
+    p_focal = simplest_rational(r.price - ε, r.price + ε)
+    d_wge   = sb_depth(r.price)
     d_focal = sb_depth(p_focal)
-    FocalPriceStats(p_wge, p_focal, d_wge, d_focal, d_wge - d_focal)
+    FocalPriceStats(r.price, p_focal, d_wge, d_focal, d_wge - d_focal)
 end

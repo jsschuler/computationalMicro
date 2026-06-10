@@ -21,7 +21,7 @@ function generate_good_market(rng::AbstractRNG;
     Q           :: Int   = 100,
     wtp_hi      :: Price = 10//1,
     wtac_lo     :: Price = 1//10,
-    wtac_hi     :: Price = 10//1) :: Tuple{GoodMarket, Union{Price,Nothing}}
+    wtac_hi     :: Price = 10//1) :: Tuple{GoodMarket, EquilibriumResult}
 
     consumers = [ConsumerDemand(good,
                      draw_wtp(rng, rand(rng, 1:max_units), Q, 1//Q, wtp_hi))
@@ -36,9 +36,9 @@ function generate_good_market(rng::AbstractRNG;
     return market, p_star
 end
 
-function generate_market(seed::Int; k::Int, kwargs...) :: Tuple{Market, Vector{Union{Price,Nothing}}}
+function generate_market(seed::Int; k::Int, kwargs...) :: Tuple{Market, Vector{EquilibriumResult}}
     markets = Vector{GoodMarket}(undef, k)
-    p_stars = Vector{Union{Price,Nothing}}(undef, k)
+    p_stars = Vector{EquilibriumResult}(undef, k)
     for j in 1:k
         rng = MersenneTwister(seed + j)
         m, p = generate_good_market(rng; good=j, kwargs...)

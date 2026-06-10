@@ -1,24 +1,32 @@
 # Phase 3: equilibrium solvers
 # Depends on: core.jl
 
-function find_equilibrium(m::GoodMarket) :: Union{Price, Nothing}
+function find_equilibrium(m::GoodMarket) :: EquilibriumResult
     all_vals = vcat(
         [d.wtp  for d in m.consumers]...,
         [f.wtac for f in m.firms    ]...
     )
-    isempty(all_vals) && return nothing
+    # Empty market: clears trivially at any price
+    isempty(all_vals) && return EquilibriumResult(1//1, true)
     candidates = sort(unique(all_vals))
 
+    best_p   = candidates[1]
+    best_abs = abs(excess_demand(m, candidates[1]))
+
     for p in candidates
-        clears(m, p) && return p
+        clears(m, p) && return EquilibriumResult(p, true)
+        ez = abs(excess_demand(m, p))
+        if ez < best_abs; best_abs = ez; best_p = p; end
     end
 
     for i in 1:(length(candidates)-1)
         p_mid = (candidates[i] + candidates[i+1]) // 2
-        clears(m, p_mid) && return p_mid
+        clears(m, p_mid) && return EquilibriumResult(p_mid, true)
+        ez = abs(excess_demand(m, p_mid))
+        if ez < best_abs; best_abs = ez; best_p = p_mid; end
     end
 
-    return nothing
+    EquilibriumResult(best_p, false)
 end
 
 function tatonnement(m::GoodMarket;
@@ -46,7 +54,7 @@ function tatonnement(m::GoodMarket;
            (denominator(p_lo) + denominator(p_hi))
 end
 
-function solve_wge_exact(m::Market) :: Vector{Union{Price,Nothing}}
+function solve_wge_exact(m::Market) :: Vector{EquilibriumResult}
     [find_equilibrium(m.goods[j]) for j in 1:m.k]
 end
 

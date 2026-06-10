@@ -3,7 +3,9 @@
     c = ConsumerDemand(1, [6//1, 4//1, 2//1])
     f = FirmSupply(1,   [1//1, 3//1, 5//1])
     m = GoodMarket(1, [c], [f])
-    p_star = find_equilibrium(m)
+    r = find_equilibrium(m)
+    @test r.cleared
+    p_star = r.price
 
     # q=2: top-2 WTP = [6,4], bottom-2 WTA = [1,3] → surplus = 10 - 4 = 6
     @test total_surplus(m, 2) == 6//1
@@ -42,10 +44,10 @@ end
 
     # For goods with a valid equilibrium: market clears and Walras holds
     for j in 1:3
-        p = p_stars[j]
-        isnothing(p) && continue
-        @test clears(mkt.goods[j], p)
-        @test excess_demand(mkt.goods[j], p) == 0
+        r = p_stars[j]
+        r.cleared || continue
+        @test clears(mkt.goods[j], r.price)
+        @test excess_demand(mkt.goods[j], r.price) == 0
     end
     @test stats.walras == 0//1
 
@@ -57,10 +59,10 @@ end
         n_consumers=3, n_firms=2, max_units=4)
 
     # Only simulate on goods where equilibrium exists
-    valid = findall(!isnothing, p_stars)
+    valid = findall(r -> r.cleared, p_stars)
     @test !isempty(valid)
 
-    p_sim = [something(p_stars[j], 1//1) for j in 1:2]
+    p_sim = [p_stars[j].price for j in 1:2]
 
     consumers = [ZIConsumer(j, 20//1) for j in 1:2 for _ in 1:3]
     firms     = [ZIFirm(j, 5)         for j in 1:2 for _ in 1:2]
