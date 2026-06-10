@@ -4,7 +4,7 @@ using DiscreteMarket
 
 # Run all phases, or restrict with: PHASES=1 julia --project=. test/runtests.jl
 phases = let s = get(ENV, "PHASES", "")
-    isempty(s) ? Set(1:8) : Set(parse.(Int, split(s, ",")))
+    isempty(s) ? Set(1:9) : Set(parse.(Int, split(s, ",")))
 end
 
 1 in phases && include("phase1.jl")
@@ -15,3 +15,4 @@ end
 6 in phases && include("randomized.jl")
 7 in phases && include("phase7.jl")
 8 in phases && include("phase8.jl")
+9 in phases && include("phase9.jl")

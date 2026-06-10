@@ -158,7 +158,7 @@ zi_eff = zi_efficiency(m, 5//1, min.(result.demands[:,1], result.supplies[:,1]))
 
 ## Implementation Status
 
-Phases 1–8 of the [design spec](discrete_market_spec.md) are complete and tested. Phases 7–8 are optional extensions loaded via `include`.
+Phases 1–9 of the [design spec](discrete_market_spec.md) are complete and tested. Phases 7–9 are optional extensions loaded via `include`.
 
 ### Phase 1 — Core Types and Aggregate Functions
 
@@ -272,6 +272,32 @@ Approximation accuracy for the canonical `p^(−σ)` function:
 
 The identity `p^(1−σ) = p · p^(−σ)` is used in the CES denominator to avoid constructing a second Padé (which would degenerate for integer 1−σ).
 
+### Phase 9 — Factor Markets with Endogenous Wage
+
+Load via `include(joinpath(pkgdir(DiscreteMarket), "src", "extensions", "factor_markets.jl"))`.
+
+Firms with labor input have a wage-dependent marginal cost `mc = w · ℓ`. At a fixed wage `w`, goods markets decouple (each depends only on its own price), so the `k`-dimensional joint equilibrium reduces to `k` independent one-dimensional problems plus one outer bisection on `w`.
+
+```julia
+include(joinpath(pkgdir(DiscreteMarket), "src", "extensions", "factor_markets.jl"))
+
+# One good: consumer WTP=[10,8,6,4], labor firm ℓ=1 cap=4, endowment=2
+m = Market([GoodMarket(1,
+    [ConsumerDemand(1, [10//1, 8//1, 6//1, 4//1])], FirmSupply[])], 1)
+firms_wl = [[FirmWithLabor(1, 1//1, 4)]]     # ℓ=1, capacity=4
+lm = LaborMarket(1, [2//1])                  # 1 worker, endowment=2
+
+p_stars, w_star = solve_wge_with_labor(m, firms_wl, lm)
+# p_stars :: Vector{EquilibriumResult}   (goods markets)
+# w_star  :: Price                       (equilibrium wage)
+```
+
+The solver runs nested Stern-Brocot tatônnement: the outer loop bisects on `w` to clear the labor market; the inner step converts each `FirmWithLabor` to an equivalent `FirmSupply` (constant cost `mc = w · ℓ`) and calls `find_equilibrium` per good. Labor demand accounts for regular firm supply first; labor firms supply the residual.
+
+**`supply_correspondence(f::FirmWithLabor, p, w)`** returns `(capacity, capacity)` when `p > mc`, `(0, capacity)` when `p = mc` (indifferent), and `(0, 0)` when `p < mc`. This integrates with the same interval-clearing logic as `FirmSupply`.
+
+Mixed markets (some regular `FirmSupply` firms, some `FirmWithLabor` firms) are supported: regular firms supply first at their equilibrium quantities; labor firms supply the remainder up to their capacities.
+
 ### Phase 8 — Stern-Brocot Focal Price Explorer
 
 Load via `include(joinpath(pkgdir(DiscreteMarket), "src", "extensions", "stern_brocot.jl"))`.
@@ -321,7 +347,7 @@ The depth_saving is always ≥ 0: the focal price is never more complex than the
 julia --project=. -e 'import Pkg; Pkg.test()'
 ```
 
-The suite runs 37 test sets including three randomized batches of 200 markets each and phase-gated extension tests (phases 7–8). Four non-obvious findings surfaced during development:
+The suite runs 43 test sets including three randomized batches of 200 markets each and phase-gated extension tests (phases 7–9). Four non-obvious findings surfaced during development:
 
 **Equilibrium non-existence in multi-unit markets.** The existence theorem (`max_i vᵢ¹ ≥ min_f cᶠ¹ → equilibrium exists`) holds only for single-unit agents. With multi-unit demands, a demand step can jump by 2 or more (e.g. two consumers share the same WTP), skipping over the supply level entirely. `find_equilibrium` returns an `EquilibriumResult` with `cleared=false` in those cases, setting `price` to the min-|Z| candidate — 1 out of 200 random markets triggers this.
 
@@ -340,5 +366,5 @@ The suite runs 37 test sets including three randomized batches of 200 markets ea
 | 1–6 | Done | Core types, solvers, ZI simulation, comparison stats, multi-good |
 | 7 | Done (extension) | Padé approximation for CES and irrational utility classes |
 | 8 | Done (extension) | Stern-Brocot focal price explorer |
-| 9 | Stub | Factor markets with endogenous wage `w` |
+| 9 | Done (extension) | Factor markets with endogenous wage `w` |
 | 10 | Pending | OLG dynamic wrapper |
