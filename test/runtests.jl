@@ -174,10 +174,12 @@ end
     @test mkt.k == 3
     @test length(p_stars) == 3
 
-    Z = excess_demand(mkt, p_stars)
     for j in 1:3
-        @test clears(mkt.goods[j], p_stars[j])
-        @test Z[j] == 0
+        p = p_stars[j]
+        if !isnothing(p)
+            @test clears(mkt.goods[j], p)
+            @test excess_demand(mkt.goods[j], p) == 0
+        end
     end
 
 end

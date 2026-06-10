@@ -141,15 +141,14 @@ function generate_good_market(rng::AbstractRNG;
     return market, p_star
 end
 
-function generate_market(seed::Int; k::Int, kwargs...) :: Tuple{Market, PriceVec}
+function generate_market(seed::Int; k::Int, kwargs...) :: Tuple{Market, Vector{Union{Price,Nothing}}}
     markets = Vector{GoodMarket}(undef, k)
-    p_stars = Vector{Price}(undef, k)
+    p_stars = Vector{Union{Price,Nothing}}(undef, k)
     for j in 1:k
         rng = MersenneTwister(seed + j)
         m, p = generate_good_market(rng; good=j, kwargs...)
         markets[j] = m
-        # Fall back to midpoint of all candidates if find_equilibrium returns nothing
-        p_stars[j] = something(p, 1//1)
+        p_stars[j] = p
     end
     Market(markets, k), p_stars
 end
@@ -181,7 +180,7 @@ end
 function tatonnement(m::GoodMarket;
     p_lo     :: Price = 1//100,
     p_hi     :: Price = 1000//1,
-    max_iter :: Int   = 200) :: Union{Price, Nothing}
+    max_iter :: Int   = 200) :: Price
 
     Z_lo = excess_demand(m, p_lo)
     Z_hi = excess_demand(m, p_hi)
@@ -207,7 +206,7 @@ function solve_wge_exact(m::Market) :: Vector{Union{Price,Nothing}}
     [find_equilibrium(m.goods[j]) for j in 1:m.k]
 end
 
-function solve_wge(m::Market; kwargs...) :: Vector{Union{Price,Nothing}}
+function solve_wge(m::Market; kwargs...) :: PriceVec
     [tatonnement(m.goods[j]; kwargs...) for j in 1:m.k]
 end
 
@@ -319,7 +318,7 @@ function compare(m::GoodMarket, p_wge::Price,
         m.good, p_wge,
         aggregate_demand(m, p_wge),
         mean(zi_d), mean(zi_s),
-        zi_efficiency(m, p_wge, zi_d),
+        zi_efficiency(m, p_wge, min.(zi_d, zi_s)),
         length(zi_d)
     )
 end
