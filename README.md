@@ -158,7 +158,7 @@ zi_eff = zi_efficiency(m, 5//1, min.(result.demands[:,1], result.supplies[:,1]))
 
 ## Implementation Status
 
-Phases 1–5 of the [design spec](discrete_market_spec.md) are complete and tested.
+Phases 1–8 of the [design spec](discrete_market_spec.md) are complete and tested. Phases 7–8 are optional extensions loaded via `include`.
 
 ### Phase 1 — Core Types and Aggregate Functions
 
@@ -238,6 +238,78 @@ stats = compare(m, p_star, result.demands[:,1], result.supplies[:,1])
 # stats.zi_efficiency uses min.(zi_d, zi_s) — actual trades, not gross demand
 ```
 
+### Phase 7 — Padé Approximation for Irrational Utility Classes
+
+Load via `include(joinpath(pkgdir(DiscreteMarket), "src", "extensions", "pade.jl"))`.
+
+**Cobb-Douglas** demand is exactly rational: `xⱼ = floor(αⱼ · I / pⱼ)` where `I = p · ω`.
+
+**CES demand** `xⱼ = I · αⱼ^σ · pⱼ^(−σ) / Σₗ αₗ^σ · pₗ^(1−σ)` involves `pⱼ^(−σ)`, which is irrational for non-integer σ. It is approximated by a [m/m] diagonal Padé approximant: a rational function `P(t)/Q(t)` in the scaled variable `t = (p − p₀)/p₀`, where `p₀` is the domain midpoint and coefficients are rationalized to denominator bound `Q_bound`.
+
+```julia
+include(joinpath(pkgdir(DiscreteMarket), "src", "extensions", "pade.jl"))
+
+# Cobb-Douglas: exact rational arithmetic
+cd = CobbDouglas([1//2, 1//2])
+demand(cd, Price[4//1, 6//1], Int[10, 8])       # => [11, 7]
+walras_residual(cd, Price[4//1, 6//1], Int[10, 8])  # => 2//1  (unspent budget)
+
+# CES with σ=1.5 (irrational): Padé order 2, domain [1,8]
+ces = CESApprox([1//2, 1//2], 1.5, 1//1, 8//1; m=2, Q_bound=1000)
+demand(ces, Price[2//1, 5//1], Int[15, 10])     # => [24, 6]
+```
+
+Approximation accuracy for the canonical `p^(−σ)` function:
+
+| Approximant | Domain | Order | Max relative error |
+|---|---|---|---|
+| `p^(−2)` (rational) | [1, 9] | 2 | < 1 × 10⁻¹⁰ (exact) |
+| `p^(−0.5)` | [1, 9] | 2 | 1.6% |
+| `p^(−1.5)` | [1, 4] | 3 | 0.32% |
+
+The identity `p^(1−σ) = p · p^(−σ)` is used in the CES denominator to avoid constructing a second Padé (which would degenerate for integer 1−σ).
+
+### Phase 8 — Stern-Brocot Focal Price Explorer
+
+Load via `include(joinpath(pkgdir(DiscreteMarket), "src", "extensions", "stern_brocot.jl"))`.
+
+The **Stern-Brocot depth** of a rational price `p/q` is the number of left/right steps to reach it in the Stern-Brocot tree, equal to `sum(continued_fraction(p/q)) − 1`. Low-depth prices are "arithmetically simple" — they arise naturally as focal points.
+
+```julia
+include(joinpath(pkgdir(DiscreteMarket), "src", "extensions", "stern_brocot.jl"))
+
+sb_depth(1//1)   # => 0   (root)
+sb_depth(1//2)   # => 1
+sb_depth(2//3)   # => 2
+sb_depth(3//5)   # => 3
+sb_depth(7//5)   # => 4   (cf = [1,2,2])
+```
+
+**`simplest_rational(lo, hi)`** returns the shallowest Stern-Brocot node in `[lo, hi]` — the rational with the smallest denominator. This runs in O(depth) via a recursive interval-halving algorithm.
+
+**`focal_price(m, ε)`** finds the simplest price that approximately clears the market:
+
+```julia
+# Market with p* = 7//5 (depth 4).  With ε = 1//5, the interval [6/5, 8/5]
+# contains 3//2 (depth 2), which is the focal price.
+focal_price(m, 1//5)   # => 3//2   (depth 2, vs WGE depth 4)
+
+stats = focal_stats(m, 1//5)
+# stats.depth_wge    => 4
+# stats.depth_focal  => 2
+# stats.depth_saving => 2
+```
+
+Over 200 random markets (2–6 consumers, 2–6 firms, up to 4 units, Q=100):
+
+| Depth metric | Value |
+|---|---|
+| Minimum WGE depth | 0 |
+| Mean WGE depth | 11.3 |
+| Maximum WGE depth | 49 |
+
+The depth_saving is always ≥ 0: the focal price is never more complex than the WGE price.
+
 ---
 
 ## Running the Tests
@@ -246,7 +318,7 @@ stats = compare(m, p_star, result.demands[:,1], result.supplies[:,1])
 julia --project=. -e 'import Pkg; Pkg.test()'
 ```
 
-The suite runs 12 test sets including three randomized batches of 200 markets each. Four non-obvious findings surfaced during development:
+The suite runs 37 test sets including three randomized batches of 200 markets each and phase-gated extension tests (phases 7–8). Four non-obvious findings surfaced during development:
 
 **Equilibrium non-existence in multi-unit markets.** The existence theorem (`max_i vᵢ¹ ≥ min_f cᶠ¹ → equilibrium exists`) holds only for single-unit agents. With multi-unit demands, a demand step can jump by 2 (two consumers share the same WTP), skipping over the supply level entirely. `find_equilibrium` correctly returns `nothing` in those cases — 1 out of 200 random markets has no competitive equilibrium.
 
@@ -262,9 +334,8 @@ The suite runs 12 test sets including three randomized batches of 200 markets ea
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1–5 | Done | Core types, solvers, ZI simulation, comparison stats |
-| 6 | Pending | Full k-good `Market` with vector tatônnement |
-| 7 | Pending | Padé approximation for CES and irrational utility classes |
-| 8 | Pending | Stern-Brocot focal price explorer |
-| 9 | Pending | Factor markets with endogenous wage `w` |
+| 1–6 | Done | Core types, solvers, ZI simulation, comparison stats, multi-good |
+| 7 | Done (extension) | Padé approximation for CES and irrational utility classes |
+| 8 | Done (extension) | Stern-Brocot focal price explorer |
+| 9 | Stub | Factor markets with endogenous wage `w` |
 | 10 | Pending | OLG dynamic wrapper |
