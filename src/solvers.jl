@@ -37,8 +37,10 @@ function tatonnement(m::GoodMarket;
     Z_lo = excess_demand(m, p_lo)
     Z_hi = excess_demand(m, p_hi)
 
-    Z_lo <= 0 && return p_lo
-    Z_hi >= 0 && return p_hi
+    Z_lo == 0 && return p_lo
+    Z_hi == 0 && return p_hi
+    Z_lo  < 0 && return p_lo
+    Z_hi  > 0 && return p_hi
 
     for _ in 1:max_iter
         # Stern-Brocot mediant: denominators grow O(n) not O(2^n), avoiding overflow
@@ -48,6 +50,17 @@ function tatonnement(m::GoodMarket;
         Z_mid == 0 && return p_mid
         Z_mid  > 0 ? (p_lo = p_mid) : (p_hi = p_mid)
         p_lo == p_hi && return p_lo
+    end
+
+    # Stern-Brocot didn't converge in max_iter steps (can happen when the
+    # equilibrium price has a large denominator, e.g. Q=100_000 markets).
+    # Scan the actual WTP/WTAC values inside the narrowed bracket exactly.
+    all_vals = sort(unique(vcat(
+        [d.wtp  for d in m.consumers]...,
+        [f.wtac for f in m.firms    ]...
+    )))
+    for p in all_vals
+        p_lo <= p <= p_hi && clears(m, p) && return p
     end
 
     return (numerator(p_lo) + numerator(p_hi)) //
